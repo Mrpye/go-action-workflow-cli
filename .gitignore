@@ -1,9 +1,13 @@
 # Binaries for programs and plugins
-*.exe
+hauler.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+*.json
+*.tar
+*.old
+config.json
 
 # Test binary, built with `go test -c`
 *.test
@@ -13,3 +17,5 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+projects/*.old
+projects/*.tar

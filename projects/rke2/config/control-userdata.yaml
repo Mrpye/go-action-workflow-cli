@@ -1,0 +1,72 @@
+#cloud-config
+write_files:
+  - path: /usr/local/bin/wait-for-node-ready.sh
+    permissions: "0755"
+    owner: root:root
+    content: |
+      #!/bin/sh
+      until (curl -sL http://localhost:10248/healthz) && [ $(curl -sL http://localhost:10248/healthz) = "ok" ];
+        do sleep 10 && echo "Wait for {{.Data.node_name}} kubelet to be ready"; done;=
+
+  - path: /etc/rancher/rke2/config.yaml
+    permissions: "0600"
+    owner: root:root
+    content: |
+      token: "Kizov0oc_{XZ-)]L?E[k8J*YLf]!B<[B$+${[$R:)kL==T6Gs:Q5SLfFQB48Ojv1"
+      {{if eq .Data.master_server `false`}}server: https://{{index (get_param `control`) 0}}:9345{{end}}
+      {{if eq (get_store `rke2` `node_type`) `control`}}
+      write-kubeconfig-mode: "0640"
+      tls-san:{{range (get_param `control`)}}
+        - {{.}}{{end}}
+      kube-apiserver-arg: "kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname"
+      {{end}}
+
+{{if eq (get_store `rke2` `node_type`) `control`}}
+  - path: /var/lib/rancher/rke2/server/manifests/metallb-native.yaml
+    permissions: "0600"
+    owner: root:root
+    encoding: gz+b64
+    content: {{gzip_base64 (file (build_path `manifest/metallb-native.yaml`))}}
+    
+  - path: /var/lib/rancher/rke2/server/manifests/metallb-ip-range.yaml
+    permissions: "0600"
+    owner: root:root
+    encoding: gz+b64
+    content: {{gzip_base64 ( tpl_file (build_path `manifest/metallb-ip-range.yaml`) .Data )}}
+
+{{if ne (get_param `nfs_server`) ``}}
+  - path: /var/lib/rancher/rke2/server/manifests/nfs-driver.yaml
+    permissions: "0600"
+    owner: root:root
+    encoding: gz+b64
+    content: {{gzip_base64 ( tpl_file (build_path `manifest/nfs-driver.yaml`))}}
+{{end}} 
+{{end}}
+
+package_update: false
+packages:
+  - iptables
+  - nfs-common
+
+runcmd:
+  - export INSTALL_RKE2_VERSION=v1.24.4+rke2r1
+{{if eq (get_store `rke2` `node_type`) `control`}}
+  - curl -sfL https://get.rke2.io | sh -
+  - systemctl enable rke2-server.service
+  - systemctl start rke2-server.service
+  - [sh,-c,"until [ -f /etc/rancher/rke2/rke2.yaml ]; do echo Waiting for rke2 to start && sleep 10; done;"]
+  - [sh,-c,"until [ -x /var/lib/rancher/rke2/bin/kubectl ]; do echo Waiting for kubectl bin && sleep 10; done;"]
+  - cp /etc/rancher/rke2/rke2.yaml /etc/rancher/rke2/rke2-remote.yaml
+  - sudo chgrp sudo /etc/rancher/rke2/rke2-remote.yaml
+  - KUBECONFIG=/etc/rancher/rke2/rke2-remote.yaml /var/lib/rancher/rke2/bin/kubectl config set-cluster default --server https://{{index (get_param `control`) 0}}:6443
+  - KUBECONFIG=/etc/rancher/rke2/rke2-remote.yaml /var/lib/rancher/rke2/bin/kubectl config rename-context default {{get_param `vm_name`}}
+  - cp /etc/rancher/rke2/rke2-remote.yaml /etc/rancher/rke2/rke2-kubeconfig.yaml
+  - sudo chown metsi:metsi /etc/rancher/rke2/rke2-kubeconfig.yaml
+{{else}}
+  - curl -sfL https://get.rke2.io | INSTALL_RKE2_TYPE="agent" sh -
+  - systemctl enable rke2-agent.service
+  - systemctl start rke2-agent.service
+{{end}}
+
+
+  

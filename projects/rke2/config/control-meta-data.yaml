@@ -1,0 +1,14 @@
+instance-id: "{{.Data.node_name }}"
+local-hostname: "{{.Data.node_name }}"
+network:
+  version: 2
+  ethernets:
+    ens192:
+      addresses: [{{.Data.ip }}/24]
+      gateway4: {{get_param `gateway`}}
+      dhcp6: false
+      nameservers:
+        addresses:
+          - 8.8.8.8
+      dhcp4: false
+      optional: true

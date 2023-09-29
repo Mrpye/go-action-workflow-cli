@@ -1,0 +1,19 @@
+package_name: Netbox
+package_version: 1.0.0
+answers:
+    - key: instance_name
+      value: dev-netbox
+    - key: admin_api_token
+      value: "3489543789345879345"
+    - key: admin_password
+      value: password
+    - key: namespace
+      value: netbox
+    - key: backup_file
+      value: data/netbox.sql
+    - key: import_db_file
+      value: false
+    - key: storage_class_name
+      value: nfs-client
+    - key: import_images
+      value: true

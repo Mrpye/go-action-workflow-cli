@@ -1,0 +1,68 @@
+meta_data:
+  name: nfs
+  description: This will install and setup an nfs server
+  version: 1.0.0
+  author: Andrew Pye
+  contact:
+  create_date: "2022-11-13 11:39:44"
+  update_date: "2022-11-13 11:39:44"
+jobs:
+  - key: install
+    actions:
+      - action: govc
+        description: "Create VM from template"
+        disabled: false
+        config:
+          command: |
+            vm.clone -vm {{get_param `vm_template`}}
+            -folder={{get_param `folder`}}
+            -net={{get_param `network`}}
+            -on=false
+            -waitip=false
+            {{get_param `vm_name`}} 
+      - action: govc
+        description: "Configure IP Address and Gateway and setup NFS using cloud-init"
+        disabled: false
+        config:
+          command: |
+            vm.change -vm "{{get_param `vm_name`}}"
+            -e guestinfo.metadata="{{base64enc (tpl_file (build_path `config/meta-data.yaml`))}}"
+            -e guestinfo.metadata.encoding="base64"
+            -e guestinfo.userdata="{{base64enc (tpl_file (build_path `config/userdata.yaml`))}}"
+            -e guestinfo.userdata.encoding="base64"
+      - action: govc
+        description: "Power on VM"
+        disabled: false
+        config:
+          command: |
+            vm.power -on {{get_param `vm_name`}}
+
+  - key: uninstall
+    actions:
+      - key: "delete_vm"
+        action: govc
+        continue_on_error: true
+        description: "Delete VM"
+        disabled: false
+        config:
+          command: "vm.destroy {{get_param `vm_name`}}"
+            
+parameters:
+  - key: "vm_template"
+    value: ""
+  - key: "folder"
+    value: ""
+  - key: "ip"
+    value: ""
+  - key: "gateway"
+    value: "" 
+  - key: "network"
+    value: ""
+  - key: "vm_name"
+    value: "NFS"
+  - key: "nfs_folders"
+    value:
+      - "provisioner"
+      - "test_folder1"
+      - "test_folder2"
+

@@ -1,0 +1,73 @@
+meta_data:
+    name: Gitlab
+    description: Deploy gitlabs
+    version: "v1.0.0"
+    author: Andrew Pye
+    contact: ""
+    create_date: "2023-04-22T12:43:29+01:00"
+    update_date: "2023-04-22T12:43:29+01:00"
+    vars:
+    github_project: Mrpye/hauler-package-gitlab
+actions: []
+jobs:
+    - key: build
+      title: "Build the package"
+      description: ""
+      actions:
+          - action: git_download
+            config:
+                files:
+                    - short: github;{{.Meta.Vars.github_project}};gitlab-5.10.2.tgz;chart/gitlab-5.10.2.tgz;main
+                    - short: github;{{.Meta.Vars.github_project}};yaml/gitlab-gitlab-initial-root-password.template.yaml;yaml;main
+                    - short: github;{{.Meta.Vars.github_project}};yaml/gitlab-gitlab-pvc.template.yaml;yaml;main
+                    - short: github;{{.Meta.Vars.github_project}};yaml/gitlab-gitlab-secret-deletion.template.yaml;yaml;main
+
+            disabled: false
+    - action: docker_reg_download
+      config:
+          folder: docker_images
+          images: "$Data.images"
+          disabled: false
+parameters: []
+data:
+    images:
+        redis-exporter: bitnami/redis-exporter:1.12.1-debian-10-r11
+        redis-sentinel: bitnami/redis-sentinel:6.0.8-debian-10-r55
+        redis: bitnami/redis:6.0.9-debian-10-r0
+        gitlab-container-registry: registry.gitlab.com/gitlab-org/build/cng/gitlab-container-registry:v3.5.2-gitlab
+        kube-state-metrics: quay.io/coreos/kube-state-metrics:v1.9.7
+        alertmanager: prom/alertmanager:v0.21.0
+        configmap-reload: jimmidyson/configmap-reload:v0.4.0
+        node-exporter: prom/node-exporter:v1.0.1
+        prometheus: prom/prometheus:v2.21.0
+        pushgateway: prom/pushgateway:v1.2.0
+        minio: minio/minio:RELEASE.2017-12-28T01-21-00Z
+        postgresql: docker.io/bitnami/postgresql:12.7.0
+        minideb: docker.io/bitnami/minideb:buster
+        postgres-exporter: docker.io/bitnami/postgres-exporter:0.8.0-debian-10-r99
+        kube-webhook-certgen: docker.io/jettech/kube-webhook-certgen:v1.5.0
+        defaultbackend-amd64: k8s.gcr.io/defaultbackend-amd64:1.5
+        grafana: grafana/grafana:7.5.5
+        curl: curlimages/curl:7.73.0
+        busybox: busybox:latest
+        k8s-sidecar: quay.io/kiwigrid/k8s-sidecar:1.10.7
+        grafana-image-renderer: grafana/grafana-image-renderer:latest
+        cert-manager-cainjector: quay.io/jetstack/cert-manager-cainjector:v1.4.1
+        cert-manager-webhook: quay.io/jetstack/cert-manager-webhook:v1.4.1
+        cert-manager-controller: quay.io/jetstack/cert-manager-controller:v1.4.1
+        alpine-certificates: registry.gitlab.com/gitlab-org/build/cng/alpine-certificates:20191127-r2
+        kubectl: registry.gitlab.com/gitlab-org/build/cng/kubectl:1.16.15
+        cfssl-self-sign: registry.gitlab.com/gitlab-org/build/cng/cfssl-self-sign:1.2
+        gitaly: registry.gitlab.com/gitlab-org/build/cng/gitaly:v14.3.3
+        kas: registry.gitlab.com/gitlab-org/cluster-integration/gitlab-agent/kas:latest
+        gitlab-shell: registry.gitlab.com/gitlab-org/build/cng/gitlab-shell:v13.21.1
+        gitlab-pages: registry.gitlab.com/gitlab-org/build/cng/gitlab-pages:master
+        gitlab-exporter: registry.gitlab.com/gitlab-org/build/cng/gitlab-exporter:latest
+        gitlab-toolbox-ee: registry.gitlab.com/gitlab-org/build/cng/gitlab-toolbox-ee:v14.3.3
+        gitlab-sidekiq-ee: registry.gitlab.com/gitlab-org/build/cng/gitlab-sidekiq-ee:v14.3.3
+        gitlab-webservice-ee: registry.gitlab.com/gitlab-org/build/cng/gitlab-webservice-ee:v14.3.3
+        gitlab-workhorse-ee: registry.gitlab.com/gitlab-org/build/cng/gitlab-workhorse-ee:v14.3.3
+        gitlab-geo-logcursor: registry.gitlab.com/gitlab-org/build/cng/gitlab-geo-logcursor:latest
+        controller: registry.gitlab.com/gitlab-org/cloud-native/mirror/images/ingress-nginx/controller:v0.41.2@sha256:1f4f402b9c14f3ae92b11ada1dfe9893a88f0faeb0b2f4b903e2c67a0c3bf0de
+        mc: minio/mc:RELEASE.2018-07-13T00-53-22Z
+        gitlab-mailroom: registry.gitlab.com/gitlab-org/build/cng/gitlab-mailroom

@@ -1,0 +1,230 @@
+meta_data:
+  name: rke2
+  description: This will install and setup an rke2 server
+  version: 1.0.0
+  author: Andrew Pye
+  contact:
+  create_date: "2022-11-13 11:39:44"
+  update_date: "2022-11-13 11:39:44"
+
+actions:
+  - key: "build_vm_name"
+    action: store
+    description: "Build Name of VM"
+    config:
+      bucket: "rke2"
+      key: "node_name"
+      value: "{{concat `-` (get_store `rke2` `node_type`) (get_param `vm_name`) (get_stk_val `i`)}}"
+
+  - key: "build_ip_address"
+    action: store
+    description: "Store IP Address as a key value pair"
+    config:
+      bucket: "rke2"
+      key: "ip"
+      value: "{{ index (get_param (get_store `rke2` `node_type`)) (get_stk_val `i`)}}"
+
+  - key: "build_ip_range_start"
+    action: store
+    description: "Store IP Address ip_range_start"
+    config:
+      bucket: "rke2"
+      key: "ip_range_start"
+      value: "{{get_param `ip_range_start`}}"
+
+  - key: "build_ip_range_end"
+    action: store
+    description: "Store IP Address ip_range_end"
+    config:
+      bucket: "rke2"
+      key: "ip_range_end"
+      value: "{{get_param `ip_range_end`}}"
+
+  - key: "build_master_server"
+    action: store
+    description: "See if a master_server server"
+    config:
+      bucket: "rke2"
+      key: "master_server"
+      value: "{{and (eq (get_stk_val `i`) 0) (eq (get_store `rke2` `node_type`) `control`) }}"
+
+  - key: "start_ip_range"
+    action: store
+    description: "Store start_ip_range"
+    config:
+      bucket: "rke2"
+      key: "ip_range_start"
+      value: "{{get_param `ip_range_start`}}"
+
+  - key: "end_ip_range"
+    action: store
+    description: "See if a master_server server"
+    config:
+      bucket: "rke2"
+      key: "ip_range_end"
+      value: "{{get_param `ip_range_end`}}"
+
+  - key: "build_vm"
+    action: govc
+    description: "Create VM from template Server Server"
+    disabled: false
+    config:
+      command: |
+        vm.clone -vm {{get_param `vm_template`}}
+        -folder={{get_param `folder`}}
+        -net={{get_param `network`}}
+        -on=false
+        -waitip=false
+        {{get_store `rke2` `node_name`}}
+
+  - key: "delete_local_config"
+    action: "file_delete"
+    description: "Delete local config file"
+    continue_on_error: true
+    config:
+      source_file: "{{get_param `kube_config`}}"
+
+  - key: "config_vm"
+    action: govc
+    description: "Configure IP Address and Gateway and setup NFS using cloud-init"
+    disabled: false
+    config:
+      command: |
+        vm.change -vm "{{get_store `rke2` `node_name`}}"
+        -e guestinfo.metadata="{{base64enc (tpl_file (build_path `config/control-meta-data.yaml`) (kps_store  `rke2` `node_name`  `ip`))}}"
+        -e guestinfo.metadata.encoding="base64"
+        -e guestinfo.userdata="{{base64enc (tpl_file (build_path `config/control-userdata.yaml`) (kps_store  `rke2` `master_server` `node_name` `ip` `ip_range_start` `ip_range_end`))}}"
+        -e guestinfo.userdata.encoding="base64"
+
+  - key: "power_on_vm"
+    action: govc
+    description: "Power on VM"
+    disabled: false
+    config:
+      command: |
+        vm.power -on {{get_store `rke2` `node_name`}}
+
+  - key: "power_off_vm"
+    action: govc
+    description: "Power on VM"
+    disabled: false
+    continue_on_error: true
+    config:
+      command: |
+        vm.power -wait=true -off {{get_store `rke2` `node_name`}}
+
+  - key: "delete_vm"
+    action: govc
+    continue_on_error: true
+    description: "Delete VM"
+    disabled: false
+    config:
+      command: |
+        vm.destroy {{get_store `rke2` `node_name`}}
+
+  - key: "download_config"
+    action: ssh_download
+    description: "Download config file"
+    disabled: false
+    config:
+      target_host: "{{index (get_param `control`) 0  }}:22"
+      target_user: "metsi"
+      target_password: "Cisco1234!"
+      source: "/etc/rancher/rke2/rke2-remote.yaml"
+      dest: "{{get_param `kube_config`}}"
+
+jobs:
+  #Build the worker nodes
+  - key: install
+    actions:
+      #Build the control nodes
+      - action: "action;build_ip_range_start"
+      - action: "action;build_ip_range_end"
+      - key: "set_as_control"
+        action: store
+        description: "Is control or worker"
+        config:
+          bucket: "rke2"
+          key: "node_type"
+          value: "control"
+      - action: "for;i;0;{{minus (count_array (get_param `control`)) 1}}"
+      - action: "action;build_vm_name" #Store the VM name in the stack
+      - action: "action;build_ip_address" #Store the IP Address in the stack
+      - action: "action;build_master_server" #See if bootstrap server
+      - action: "action;build_vm" #Create VM from template
+      - action: "action;config_vm" #Configure IP Address and Gateway and setup NFS using cloud-init
+      - action: "action;power_on_vm" #Power on VM
+      - action: "next"
+      #Build the worker nodes
+      - key: "set_as_control"
+        action: store
+        description: "Is control or worker"
+        config:
+          bucket: "rke2"
+          key: "node_type"
+          value: "worker"
+      - action: "for;i;0;{{minus (count_array (get_param `worker`)) 1}}"
+      - action: "action;build_vm_name" #Store the VM name in the stack
+      - action: "action;build_ip_address" #Store the IP Address in the stack
+      - action: "action;build_master_server" #See if bootstrap server
+      - action: "action;build_vm" #Create VM from template
+      - action: "action;config_vm" #Configure IP Address and Gateway and setup NFS using cloud-init
+      - action: "action;power_on_vm" #Power on VM
+      - action: "next"
+      - action: "action;download_config" #Download config file
+
+  - key: uninstall
+    actions:
+      #Build the control nodes
+      - key: "set_as_control"
+        action: store
+        description: "Is control or worker"
+        config:
+          bucket: "rke2"
+          key: "node_type"
+          value: "control"
+      - action: "for;i;0;{{minus (count_array (get_param `control`)) 1}}"
+      - action: "action;build_vm_name" #Power on VM
+      - action: "action;delete_vm" #Power on VM
+      - action: "next"
+      #Build the worker nodes
+      - key: "set_as_control"
+        action: store
+        description: "Is control or worker"
+        config:
+          bucket: "rke2"
+          key: "node_type"
+          value: "worker"
+      - action: "for;i;0;{{minus (count_array (get_param `worker`)) 1}}"
+      - action: "action;build_vm_name" #Power on VM
+      - action: "action;delete_vm" #Power on VM
+      - action: "next"
+      - action: "action;delete_local_config"
+
+parameters:
+  - key: "control"
+    value:
+      - "10.10.10.10"
+      #- "10.22.60.121"
+  - key: "worker"
+    value:
+      - "10.10.10.10"
+      - "10.10.10.10"
+  - key: "vm_template"
+    value: ""
+  - key: "folder"
+    value: ""
+  - key: "gateway"
+    value: ""
+  - key: "network"
+    value: ""
+  - key: "vm_name"
+    value: "Rancher-Rke2"
+  - key: "ip_range_start"
+    value: "10.10.10.10"
+  - key: "ip_range_end"
+    value: "10.10.10.10"
+  - key: "nfs_server"
+    value: "10.10.10.10"
+  - key: "kube_config"
+    value: "rke2-remote.yaml"

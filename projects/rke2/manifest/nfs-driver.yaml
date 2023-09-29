@@ -1,0 +1,11 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: nfs-subdir-external-provisioner
+  namespace: kube-system
+spec:
+  chart: https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner/releases/download/nfs-subdir-external-provisioner-4.0.18/nfs-subdir-external-provisioner-4.0.18.tgz
+  targetNamespace: default
+  set:
+    nfs.server: "{{get_param `nfs_server`}}"
+    nfs.path: /mnt/nfs_share/provisioner/

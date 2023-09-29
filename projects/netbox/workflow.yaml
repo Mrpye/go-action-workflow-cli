@@ -1,0 +1,291 @@
+meta_data:
+  name: Netbox
+  description: This will install netbox
+  version: 1.0.0
+  author: Andrew Pye
+  contact: ""
+  create_date: "2022-11-13 11:39:44"
+  update_date: "2023-03-15T12:19:56Z"
+  vars:
+    github_project: Mrpye/hauler-package-netbox
+
+actions:
+  - key: k8_get_service_ip
+    action: k8_get_service_ip
+    config:
+      name: "^{{get_param `instance_name`}}$"
+      namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+      result_action: js
+      result_format: json
+      result_js: |4-
+                  function ActionResults(store, result) {
+                    result=JSON.parse(result)
+                    if (result.length > 0) {
+                      log_title_green("You can access netbox using",'*')
+                      console("http://"+result[0].ip+":"+result[0].port)
+                    }
+                    return true;
+                  }
+  - key: wait_for_netbox_to_deploy
+    disabled: false
+    action: k8_wait
+    config:
+      checks:
+        - deployment:{{get_param `instance_name`}}
+        - deployment:{{get_param `instance_name`}}-worker
+        - stateful:{{get_param `instance_name`}}-postgresql
+        - stateful:{{get_param `instance_name`}}-redis-master
+        - stateful:{{get_param `instance_name`}}-redis-slave
+      namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+      retry: 60
+  - key: import_docker_images
+    action: docker_reg_upload
+    config:
+        folder: docker_images
+        images: "$data.images"
+          
+jobs:
+  - key: install
+    title: ""
+    description: ""
+    actions:
+      - action: "action;import_docker_images"
+        disabled: "{{not (get_param `import_images`)}}"
+      - action: k8_create_ns
+        config:
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+      - action: k8_yaml
+        disabled: false
+        config:
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          process_tokens: true
+          delete: false
+          manifest: "yaml/netbox-prereqs.template.yaml"
+      - key: deploy_netbox
+        disabled: false
+        action: k8_helm_deploy_upgrade
+        config:
+          chart_Path: "chart/netbox-3.0.0.tgz"
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          release_name: "{{get_param `instance_name`}}"
+          target_name: ""
+          upgrade: false
+          helm_config:
+            persistence:
+              enabled: true
+              size: 8Gi
+              storageClass: "{{get_param `storage_class_name`}}"
+            fullnameOverride: "{{get_param `instance_name`}}"
+            image:
+              repository: "{{remap_image (get_wf) `netbox` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.netbox))}}"
+              tag: "{{image_tag (.Manifest.Data.images.netbox)}}"
+            init:
+              image:
+                repository: "{{remap_image (get_wf) `busybox` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.busybox))}}"
+                tag: "{{image_tag (.Manifest.Data.images.busybox)}}"
+            nameOverride: "{{get_param `instance_name`}}"
+            postgresql:
+              image:
+                repository: "{{remap_image (get_wf) `postgresql` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.postgresql))}}"
+                tag: "{{image_tag (.Manifest.Data.images.postgresql)}}"
+              metrics:
+                image:
+                  repository: "{{remap_image (get_wf) `postgres-exporter` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.postgres_exporter))}}"
+                  tag: "{{image_tag (.Manifest.Data.images.postgres_exporter)}}"
+              postgresqlPassword: postgresqlPassword
+              postgresqlPostgresPassword: PostgresPassword
+              volumePermissions:
+                enabled: false
+                image:
+                  repository: "{{remap_image (get_wf) `minideb` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.minideb)) }}"
+                  tag: "{{image_tag (.Manifest.Data.images.minideb)}}"
+            redis:
+              image:
+                repository: "{{remap_image (get_wf) `redis` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.redis))}}"
+                tag: "{{image_tag (.Manifest.Data.images.redis)}}"
+              metrics:
+                enabled: false
+                image:
+                  repository: "{{remap_image (get_wf) `redis-exporter` `` true (not (get_param `import_images`))  (image_shortname (.Manifest.Data.images.redis_exporter))}}"
+                  tag: "{{image_tag (.Manifest.Data.images.redis_exporter)}}"
+              sentinel:
+                enabled: false
+                image:
+                  repository: "{{remap_image (get_wf) `redis-sentinel` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.redis_sentinel))}}"
+                  tag: "{{image_tag (.Manifest.Data.images.redis_sentinel)}}"
+              sysctlImage:
+                enabled: false
+                repository: "{{remap_image (get_wf) `minideb` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.minideb))}}"
+                tag: "{{image_tag (.Manifest.Data.images.minideb)}}"
+              volumePermissions:
+                enabled: false
+                image:
+                  repository: "{{remap_image (get_wf) `minideb` `` true (not (get_param `import_images`)) (image_shortname (.Manifest.Data.images.minideb))}}"
+                  tag: "{{image_tag (.Manifest.Data.images.minideb)}}"
+            service:
+              port: "8080"
+              type: LoadBalancer
+            superuser:
+              apiToken: "{{get_param `admin_api_token`}}"
+              password: "{{get_param `admin_password`}}"
+      - action: "action;wait_for_netbox_to_deploy"
+      - action: "action;k8_get_service_ip"
+
+
+      
+  - key: uninstall
+    title: ""
+    description: ""
+    actions:
+      - action: k8_helm_delete
+        continue_on_error: true
+        config:
+          release_name: "{{get_param `instance_name`}}"
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+      - action: k8_yaml
+        continue_on_error: true
+        config:
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          delete: true
+          process_tokens: true
+          manifest: "yaml/netbox-prereqs.template.yaml"
+
+      - key: delete_ns
+        disabled: false
+        description: Delete Namespace
+        continue_on_error: true
+        action: k8_delete_ns
+        config:
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          target_action: default
+
+
+
+  - key: restore_db
+    title: "Backup the database"
+    description: ""
+    actions:
+      - key: delete_dn_pod
+        description: This action will delete the db pod
+        action: k8_delete_pod
+        config:
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          name: "{{get_param `instance_name`}}-postgresql-0"
+      - action: "action;wait_for_netbox_to_deploy"
+      - action: "wait;30"
+      - key: upload_db_dump
+        description: uploads the database dump
+        action: k8_copy
+        config:
+          container_name: "{{get_param `instance_name`}}-postgresql"
+          dest: "{{get_param `namespace`}}-{{get_param `instance_name`}}/{{get_param `instance_name`}}-postgresql-0:/tmp/netbox.sql"
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          result_action: none
+          src: "{{build_path (get_param `backup_file`)}}"
+      - key: drop_db
+        description: This action will drop the database
+        action: k8_pod_exec
+        config:
+          command: env PGPASSWORD=PostgresPassword psql -U postgres -c "drop database netbox"
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          pod_name: "{{get_param `instance_name`}}-postgresql-0"
+          result_action: print
+      - key: create_db
+        description: This action will create the database
+        action: k8_pod_exec
+        config:
+          command: env PGPASSWORD=PostgresPassword psql -U postgres -c "create database netbox"
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          pod_name: "{{get_param `instance_name`}}-postgresql-0"
+          result_action: print
+      - key: import_db
+        description: This action will import the database
+        action: k8_pod_exec
+        config:
+          command: env PGPASSWORD=PostgresPassword pg_restore --host "localhost" --port "5432" --username "postgres" --no-password --dbname "netbox" --verbose "/tmp/netbox.sql"
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          pod_name: "{{get_param `instance_name`}}-postgresql-0"
+          result_action: print
+  - key: backup_db
+    title: "Backup the database"
+    description: ""
+    actions:
+      - key: delete_dn_pod
+        disabled: true
+        description: This action will delete the db pod
+        action: k8_delete_pod
+        config:
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          name: "{{get_param `instance_name`}}-postgresql-0"
+      - action: "action;wait_for_netbox_to_deploy"
+        disabled: true
+      - action: "wait;60"
+        disabled: true
+      - key: dump_db
+        disabled: false
+        description: This action will dump the database
+        action: k8_pod_exec
+        config:
+          command: env PGPASSWORD=postgresqlPassword pg_dump --file "/tmp/netbox.sql" --host "127.0.0.1" --port "5432" --username "netbox" --no-password --verbose --format=c --blobs "netbox"
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          pod_name: "{{get_param `instance_name`}}-postgresql-0"
+      - key: download_db_dump
+        disabled: false
+        description: downloads the database dump
+        action: k8_copy
+        config:
+          container_name: "{{get_param `instance_name`}}-postgresql"
+          dest: "{{build_path (get_param `backup_file`)}}"
+          namespace: "{{get_param `namespace`}}-{{get_param `instance_name`}}"
+          src: "{{get_param `namespace`}}-{{get_param `instance_name`}}/{{get_param `instance_name`}}-postgresql-0:/tmp/netbox.sql"
+  - key: build
+    title: ""
+    description: ""
+    actions:
+      - action: git_download
+        config:
+          files:
+            - short: github;{{.Meta.Vars.github_project}};yaml/netbox-prereqs.template.yaml;yaml/netbox-prereqs.template.yaml;main
+            - short: github;{{.Meta.Vars.github_project}};netbox-3.0.0.tgz;chart/netbox-3.0.0.tgz;main
+            - short: github;{{.Meta.Vars.github_project}};data/netbox.sql;data/netbox.sql;main
+        disabled: false
+      - action: docker_reg_download
+        config:
+          folder: docker_images
+          images: "$Data.images"
+        disabled: false
+  - key: get_service_ip
+    title: ""
+    description: ""
+    actions:
+      - action: "action;k8_get_service_ip"
+
+parameters:
+  - key: instance_name
+    value: "dev-netbox"
+  - key: admin_api_token
+    value: "3489543789345879345"
+  - key: admin_password
+    value: "password"
+  - key: namespace
+    value: "netbox"
+  - key: backup_file
+    value: "data/netbox.sql"
+  - key: import_db_file
+    value: false
+  - key: storage_class_name
+    value: nfs-client
+  - key: import_images
+    value: false
+
+data: 
+  images:
+    netbox: netboxcommunity/netbox:v2.10.4
+    busybox: busybox:1.32.1
+    postgresql: bitnami/postgresql:12.11.0-debian-11-r13
+    postgres_exporter: bitnami/postgres-exporter:0.8.0-debian-10-r354
+    minideb: bitnami/minideb:buster
+    redis: bitnami/redis:6.0.10-debian-10-r19
+    redis_sentinel: bitnami/redis-sentinel:6.0.10-debian-10-r18
+    redis_exporter: bitnami/redis-exporter:1.16.0-debian-10-r7
+    

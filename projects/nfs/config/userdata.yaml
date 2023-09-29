@@ -1,0 +1,42 @@
+#cloud-config
+package_update: false
+packages:
+  - nfs-kernel-server
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg-agent
+  - software-properties-common
+  
+write_files:
+    - path: /database/filebrowser/filebrowser.db
+      permissions: "0755"
+      owner: root:root
+      encoding: gz+b64
+      content: {{gzip_base64 (file (build_path `browser/filebrowser.db`))}}
+      
+    - path: /database/.filebrowser.json
+      permissions: "0755"
+      owner: root:root
+      encoding: gz+b64
+      content: {{gzip_base64 (file (build_path `browser/.filebrowser.json`))}}
+
+runcmd:
+  - sudo mkdir -p /mnt/nfs_share
+{{range $index, $element := get_param `nfs_folders`}}
+  - sudo mkdir -p /mnt/nfs_share/{{$element}}
+{{end}}
+  - sudo chown -R nobody:nogroup /mnt/nfs_share/
+  - sudo chmod -R 777 /mnt/nfs_share/
+
+  - sudo echo "/mnt/nfs_share {{get_param `ip`}}/24(rw,sync,no_subtree_check)" >> /etc/exports
+  - sudo exportfs -a
+  - sudo systemctl restart nfs-kernel-server
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+  - add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+  - apt-get update -y
+  - apt-get install -y docker-ce docker-ce-cli containerd.io
+  - systemctl start docker
+  - systemctl enable docker
+  - sudo docker run -d  --restart always -v /mnt/nfs_share:/srv -v /database/filebrowser/filebrowser.db:/database.db -v /database/.filebrowser.json:/.filebrowser.json -u $(id -u):$(id -g) -p 8080:80 filebrowser/filebrowser
+

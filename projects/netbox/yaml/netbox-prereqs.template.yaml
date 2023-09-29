@@ -1,0 +1,73 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app.kubernetes.io/instance: "{{ get_param `instance_name` }}"
+    app.kubernetes.io/name: postgresql
+  namespace: default
+  name: data-{{get_param `instance_name`}}-postgresql-0
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: "{{get_param `storage_class_name`}}"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: redis
+    component: master
+    heritage: Helm
+    release: "{{get_param `instance_name`}}"
+    role: master
+  namespace: default
+  name: redis-data-{{get_param `instance_name`}}-redis-master-0
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: "{{get_param `storage_class_name`}}"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: redis
+    component: slave
+    heritage: Helm
+    release: "{{get_param `instance_name`}}"
+    role: slave
+  namespace: default
+  name: "redis-data-{{get_param `instance_name`}}-redis-slave-0"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: "{{get_param `storage_class_name`}}"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: redis
+    component: slave
+    heritage: Helm
+    release: "{{get_param `instance_name`}}"
+    role: slave
+  namespace: default
+  name: redis-data-{{get_param `instance_name`}}-redis-slave-1
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: "{{get_param `storage_class_name`}}"
